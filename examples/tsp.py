@@ -28,7 +28,7 @@ def tsp_simulated_annealing(cities, epochs=10):
     def neighbour_fn(tour):
         return nopt.two_opt_swap(tour)
     
-    best_tour, obj_values, curr_obj_values, temp_values = sa.simulated_annealing(obj_fn, neighbour_fn, init_tour, epochs)
+    best_tour, obj_values, curr_obj_values, temp_values = sa.simulated_annealing(obj_fn, neighbour_fn, init_tour, epochs=epochs)
     
     # plot
     fig, ax1 = plt.subplots()

@@ -1,4 +1,4 @@
-import enum
+# import enum
 import random
 import math
 
@@ -13,7 +13,9 @@ def simulated_annealing(problem,
                         initial_temp, 
                         cooling_rate, 
                         iterations,
-                        persistence=1,):
+                        persistence=1, 
+                        debug=True):
+
     
     current_solution = initial_solution
     current_cost = calculate_cost(current_solution, problem)
@@ -41,33 +43,19 @@ def simulated_annealing(problem,
         
         temperature *= cooling_rate
         similarity = manhattan_similarity(current_solution, neighbor)
-        print(f'iteration : {i}, current: {current_cost}, neighbour: {neighbor_cost},  temp: {round(temperature,3)}, explored:{len(explored)}, feasible:{len(explored)-len(infeasible)}, manhattan:{similarity}')
+        if debug:
+            print(f'iteration : {i}, current: {current_cost}, neighbour: {neighbor_cost},  temp: {round(temperature,3)}, explored:{len(explored)}, feasible:{len(explored)-len(infeasible)}, manhattan:{similarity}')
     
     return best_solution, best_cost
 
 
 
 def generate_neighbor(solution, problem, explored, infeasible, persistence=1):
-    """
-    Generate a neighbor solution by swapping two elements.
     
-    Args:
-    solution (list): Current solution represented as a binary list.
-    problem (dict): Problem instance containing constraints.
-    
-    Returns:
-    list: New neighbor solution after the swap operation.
-    """ 
     def swap(solution, swap_size=1):
-        neighbor = solution.copy()  # Create a copy of the current solution
-    
-        # Get indices of 1s and 0s in the solution
+        neighbor = solution.copy() 
         ones = [i for i, x in enumerate(neighbor) if x == 1]
-        # zeros = [i for i, x in enumerate(neighbor) if x == 0]
-    
-        # Ensure there's at least one 1 and one 0 to swap
         if ones:
-            # Randomly select one index with 1 and one with 0
             # index_one = random.choices(ones, swap_size)
             swap_size = max(2, swap_size)
             # print("counter", counter, "swap_size", swap_size, "column_count", len(ones) )
@@ -82,13 +70,13 @@ def generate_neighbor(solution, problem, explored, infeasible, persistence=1):
             for i in indices:
                 neighbor[i] = 0
         
-        I = problem["rows"].keys() # Set of rows (flights to cover).
+        I = problem["rows"].keys() # Set of rows 
         U = set(I)  # Initialize U as the set of all rows
         Sk = set()  # Initialize an empty solution
         for idx, val in enumerate(neighbor): 
             if val==1:
                 Sk.add(idx)
-                for row in columns[idx]:
+                for row in problem["columns"][idx]:
                     U.remove(row)
         
         # print(U, swap_size)
@@ -97,18 +85,17 @@ def generate_neighbor(solution, problem, explored, infeasible, persistence=1):
             i = random.choice(list(U))
             
             # Randomly select a column j from rows[i] such that β[j] ∩ (I − U) = ∅
-            valid_columns = [j for j in rows[i] if not columns[j].intersection(set(I) - U)]
+            valid_columns = [j for j in problem["rows"][i] if not problem["columns"][j].intersection(set(I) - U)]
             
             if valid_columns:
                 # Add column j to Sk, and update U
                 j = random.choice(valid_columns)
                 Sk.add(j)
-                U -= columns[j]  # Remove all rows covered by column j from U
+                U -= problem["columns"][j]  # Remove all rows covered by column j from U
             else:
                 # If no valid column exists, remove i from U
                 U.remove(i)
 
-        # Add the generated solution Sk to the population
         solution = [0]*len(problem["columns"])
         for i in Sk:
             solution[i]=1
@@ -127,7 +114,7 @@ def generate_neighbor(solution, problem, explored, infeasible, persistence=1):
         neighbor = swap(solution, swap_size)
         if str(neighbor) in explored:
             continue
-        # Check if the new solution is feasible
+        
         if is_feasible(neighbor, problem):
             explored.add(str(neighbor))
             return neighbor, explored, infeasible
@@ -135,44 +122,28 @@ def generate_neighbor(solution, problem, explored, infeasible, persistence=1):
             explored.add(str(neighbor))
             infeasible.add(str(neighbor))
             continue
+    
     # If swap didn't produce current_costa feasible solution, return the original
     return solution, explored, infeasible
 
 def is_feasible(solution, problem):
-    """
-    Check if the solution is feasible for the Set Partitioning Problem (SPP).
+    covered_rows = set()  
+    row_counts = {}  
     
-    Args:
-    solution (list): Solution to check (binary list where 1 indicates a selected column).
-    problem (dict): Problem instance containing constraints:
-        - problem['columns']: A list of sets, where each set represents the rows covered by a column.
-        - problem['rows']: A set of all rows that need to be covered.
     
-    Returns:
-    bool: True if the solution is feasible, False otherwise.
-    """
-    covered_rows = set()  # To track rows that are covered
-    row_counts = {}  # To track how many times each row is covered
-
-    # Iterate over selected columns in the solution
     for i, selected in enumerate(solution):
-        if selected:  # If column i is selected
+        if selected:  
             covered_rows.update(problem['columns'][i])
             for row in problem['columns'][i]:
                 if row in row_counts:
-                    # If a row is already covered, increment its count
                     row_counts[row] += 1
                 else:
-                    # Otherwise, initialize its count to 1
                     row_counts[row] = 1
 
-    # Check completeness: All rows must be covered exactly once
     for row in problem['rows'].keys():
         if row not in row_counts or row_counts[row] != 1:
-            return False  # Either not covered or covered more than once
-
-    return len(covered_rows) == len(problem['rows'])  # Feasible if all rows are covered exactly once
-
+            return False  
+    return len(covered_rows) == len(problem['rows'])  
 
 # calculate cost
 def calculate_cost(solution, problem):
@@ -192,64 +163,39 @@ def pseudo_random_init(rows, columns):
     return S
 
 
-def initialize_population(population_size, problem):
-    """
-    Initialize the population P(0) for the Set Partitioning Problem (SPP).
-    
-    Parameters:
-    - population_size : Number of individuals in the population.
-    - problem->rows: A dictionary where rows[i] is the set of columns (pairings) that cover row i.
-    - problem->columns: A dictionary where columns[j] is the set of rows covered by column j.
-    
-    Returns:
-    - population: A list of solutions, where each solution is a set of selected columns.
-    """
-    rows = problem["rows"]
-    columns = problem["columns"]
+def initialize_population(population_size, problem_data):
+    population_size = max(1, population_size)
+    rows = problem_data["rows"]
+    columns = problem_data["columns"]
     population = []
-    I = rows.keys() # Set of rows (flights to cover).
-    for k in range(population_size):
-        Sk = set()  # Initialize an empty solution
-        U = set(I)  # Initialize U as the set of all rows
-
-        while U:
-            # Step 4: Randomly select a row i from U
-            i = random.choice(list(U))
-            
-            # Step 5: Randomly select a column j from rows[i] such that β[j] ∩ (I − U) = ∅
-            valid_columns = [j for j in rows[i] if not columns[j].intersection(set(I) - U)]
-            
+    row_indices = rows.keys()
+    count = 0
+    while count < population_size:
+        solution_set = set()
+        uncovered_rows = set(row_indices)
+        while uncovered_rows:
+            row_index = random.choice(list(uncovered_rows))
+            valid_columns = [column_index for column_index in rows[row_index] if not columns[column_index].intersection(set(row_indices) - uncovered_rows)]
             if valid_columns:
-                # Step 7: Add column j to Sk, and update U
-                j = random.choice(valid_columns)
-                Sk.add(j)
-                U -= columns[j]  # Remove all rows covered by column j from U
+                column_index = random.choice(valid_columns)
+                solution_set.add(column_index)
+                uncovered_rows -= columns[column_index]
             else:
-                # Step 9: If no valid column exists, remove i from U
-                U.remove(i)
-
-        # Add the generated solution Sk to the population
-        solution = [0]*len(problem["columns"])
-        for i in Sk:
-            solution[i]=1
-        population.append(solution)
-
-    
+                uncovered_rows.remove(row_index)
+        solution = [0] * len(problem_data["columns"])
+        for index in solution_set:
+            solution[index] = 1
+        if is_feasible(solution, problem_data):
+            population.append(solution)
+            count = count + 1
+        else:
+            continue
     return population
 
 
 
 
 def invert_dict_of_sets(d):
-    """
-    Inverts a dictionary of sets such that keys become values and values become keys.
-    
-    Parameters:
-    - d: A dictionary where values are sets.
-    
-    Returns:
-    - inverted: The inverted dictionary.
-    """
     inverted = {}
     for key, value_set in d.items():
         for v in value_set:
@@ -261,16 +207,6 @@ def invert_dict_of_sets(d):
 
 
 def manhattan_similarity(list1, list2):
-    """
-    Measure the similarity between two binary lists using Manhattan distance.
-
-    Args:
-    - list1 (list): First binary list.
-    - list2 (list): Second binary list.
-
-    Returns:
-    - int: Manhattan distance (number of differing positions).
-    """
     if len(list1) != len(list2):
         raise ValueError("Both lists must have the same length.")
     
@@ -278,13 +214,6 @@ def manhattan_similarity(list1, list2):
     distance = sum(abs(a - b) for a, b in zip(list1, list2))
     
     return distance
-
-# Example Usage
-binary_list1 = [1, 0, 1, 1, 0]
-binary_list2 = [0, 0, 1, 0, 1]
-
-distance = manhattan_similarity(binary_list1, binary_list2)
-print(f"Manhattan Distance: {distance}")
 
 
 def read_set_cover_data(file_path):
@@ -314,30 +243,55 @@ def read_set_cover_data(file_path):
     return  rows, columns, costs
 
 
+def sa(file_path, debug=False):
+    rows, columns, costs = read_set_cover_data(file_path)
+    problem = {}
+    problem["rows"] = rows  
+    problem["columns"] = columns
+    problem["cost"]= costs
+    
+    solution = initialize_population(1, problem)[0]
+
+    simulated_annealing_params = {
+                        "problem":problem, 
+                        "calculate_cost":calculate_cost, 
+                        "get_neighbor":generate_neighbor, 
+                        "initial_solution":solution, 
+                        "initial_temp":100, 
+                        "cooling_rate":0.995, 
+                        "iterations":1000,
+                        "persistence":1,
+                        "debug":False
+                        # "min_temp": 0.1,
+    }
+    
+    best_solution, best_cost = simulated_annealing(**simulated_annealing_params)
+    selected_columns = [idx for idx, val in enumerate(best_solution) if val==1]
+    # # print("best_solution", best_solution)
+    # print("selected_columns", selected_columns)
+    # print("cost of solution", best_cost)
+    
+    check_list = []
+    for i in selected_columns:
+        # print(list(columns[i]))
+        check_list.extend(list(columns[i]))
+    # check_list.sort()
+    # print(check_list)
+    
+    # print("row count", len(rows))
+    # print("length", len(check_list))
+    # print("length", len(set(check_list)))
+    # print("feasible: ",is_feasible(best_solution, problem))
+    feasible = is_feasible(best_solution, problem)
+    
+    return best_solution, best_cost, feasible
+    
+
 
 if __name__ == "__main__":
 
-    # Example usage:
-    file_path = './data/set_cover/sppnw42.txt'  # Replace with the actual file path
+    file_path = './sppnw42.txt'  
     rows, columns, costs = read_set_cover_data(file_path)
-    
-    # costs = [300, 400, 500,600, 700]
-
-    # rows = {
-    # 0: {4, 0},
-    # 1: {1, 2},
-    # 2: {2, 3},print("constraint satisfied :", is_feasible(best_solution, problem_data))
-    # 3: {3, 4}
-    #   }  # Columns covering each row
-    # columns = {
-    # 0: {0},
-    # 1: {1},
-    # 2: {1, 2},
-    # 3: {2, 3},
-    # 4: {3, 0},
-    
-    # }  # Rows covered by each column
-    
     
     # Print the results
     print("num_rows:", len(rows))
@@ -347,7 +301,7 @@ if __name__ == "__main__":
     # print("columns:", columns)
     
     problem = {}
-    problem["rows"] = rows  # adjusting index start to zero
+    problem["rows"] = rows  
     problem["columns"] = columns
     problem["cost"]= costs
     

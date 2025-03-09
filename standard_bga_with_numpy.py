@@ -1,24 +1,24 @@
 import numpy as np
 import random
 
-def genetic_algorithm_set_partition(constraint_matrix, column_costs, max_iterations=100, population_size=200, constraint_violation_penalty=10000):
+def genetic_algorithm_set_partition(constraint_matrix, column_costs, max_iterations=100, population_size=200, constraint_violation_penalty=10000, debug=True):
     
     num_columns = constraint_matrix.shape[1]
-    # Initialize population randomly (0 or 1)
+    
     population = np.random.rand(population_size, num_columns) > 0.5
     best_fitness_values = []
     average_fitness_values = []
 
     for iteration in range(max_iterations):
-        # Evaluate fitness
+        # evaluate fitness
         fitness_values, best_fitness, total_constraint_violations = calculate_fitness(population, constraint_matrix, column_costs, constraint_violation_penalty)
-        # Sort population by fitness (ascending, since we minimize cost)
+        # sort population by fitness
         sorted_indices = np.argsort(fitness_values)
         population = population[sorted_indices]
-        # Store statistics
+        # statistics
         best_fitness_values.append(fitness_values[0])
         average_fitness_values.append(np.mean(fitness_values))
-        # Selection: Tournament selection
+        # parent selection: Tournament selection
         parents = perform_tournament_selection(population, fitness_values, tournament_size=3)
         # Crossover: Uniform crossover
         offspring = perform_uniform_crossover(parents, population_size, num_columns)
@@ -30,8 +30,8 @@ def genetic_algorithm_set_partition(constraint_matrix, column_costs, max_iterati
         fitness_values, best_fitness, total_constraint_violations = calculate_fitness(population, constraint_matrix, column_costs, constraint_violation_penalty)
         sorted_indices = np.argsort(fitness_values)
         population = population[sorted_indices[:population_size]]
-        # Print progress
-        print(f'generation:{iteration}, violation:{total_constraint_violations[0]}, cost min:{best_fitness[0]}, cost max:{max(best_fitness)}, std:{round(np.std(best_fitness))}')
+        if debug:
+            print(f'generation:{iteration}, violation:{total_constraint_violations[0]}, cost min:{best_fitness[0]}, cost max:{max(best_fitness)}, std:{round(np.std(best_fitness))}')
         
         # Stopping criteria
         if iteration == max_iterations - 1:
@@ -40,9 +40,10 @@ def genetic_algorithm_set_partition(constraint_matrix, column_costs, max_iterati
     best_solution = population[0]
     best_cost = best_fitness[0]
     best_violations = total_constraint_violations[0]
-    # Print results
-    print(f"Minimum cost found by GA: {best_cost}")
-    print(f"Total constraint violations: {best_violations}")
+
+    if debug:
+        print(f"Minimum cost found by GA: {best_cost}")
+        print(f"Total constraint violations: {best_violations}")
     return best_solution, best_cost
 
 def perform_uniform_crossover(parents, population_size, num_bits):
@@ -81,34 +82,6 @@ def perform_mutation(offspring, num_columns):
             offspring[j, mutation_bit] = 1 - offspring[j, mutation_bit]
     return offspring
 
-def initialize_population(population_size, problem_data):
-    population_size = max(1, population_size)
-    rows = problem_data["rows"]
-    columns = problem_data["columns"]
-    population = []
-    row_indices = rows.keys()
-    count = 0
-    while count < population_size:
-        solution_set = set()
-        uncovered_rows = set(row_indices)
-        while uncovered_rows:
-            row_index = random.choice(list(uncovered_rows))
-            valid_columns = [column_index for column_index in rows[row_index] if not columns[column_index].intersection(set(row_indices) - uncovered_rows)]
-            if valid_columns:
-                column_index = random.choice(valid_columns)
-                solution_set.add(column_index)
-                uncovered_rows -= columns[column_index]
-            else:
-                uncovered_rows.remove(row_index)
-        solution = [0] * len(problem_data["columns"])
-        for index in solution_set:
-            solution[index] = 1
-        if is_feasible(solution, problem_data):
-            population.append(solution)
-            count = count + 1
-        else:
-            continue
-    return population
 
 def is_feasible(solution, problem_data):
     matrix_a = np.zeros((len(problem_data["rows"]),len(problem_data["columns"])))
@@ -144,9 +117,77 @@ def load_data_set(filename):
                 constraint_matrix[row - 1, j] = 1
     return constraint_matrix, column_costs
 
+def invert_dict_of_sets(d):
+    inverted = {}
+    for key, value_set in d.items():
+        for v in value_set:
+            if v not in inverted:
+                inverted[v] = set()
+            inverted[v].add(key)
+    return inverted
+
+
+def read_set_cover_data(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+    num_rows, num_columns = map(int, lines[0].split())
+    costs = []
+    coverage = []
+    for line in lines[1:]:
+        data = list(map(int, line.split()))
+        cost = data[0]
+        costs.append(cost)
+        elements = data[2:]
+        if len(elements) != data[1]:
+            raise Exception("set length not matching")
+        coverage.append([i-1 for i in elements])
+    columns = dict(enumerate(coverage))
+    for item in columns:
+        columns[item] = set(columns[item])
+    rows = invert_dict_of_sets(columns)
+    return  rows, columns, costs
+
+
+def bga(file_path, debug=False):
+    rows, columns, costs = read_set_cover_data(file_path)
+    problem = {}
+    problem["rows"] = rows  
+    problem["columns"] = columns
+    problem["cost"]= costs
+    
+    constraint_matrix, column_costs = load_data_set(file_path)
+    rows_dict, columns_dict = convert_to_dictionaries(constraint_matrix)
+    problem_data = {}
+    problem_data["rows"] = rows_dict
+    problem_data["columns"] = columns_dict
+    problem_data["cost"] = column_costs
+    # print("row count:", len(rows_dict))
+    # print("column count:", len(columns_dict))
+    best_solution, best_cost = genetic_algorithm_set_partition(constraint_matrix, column_costs, max_iterations=100, population_size=1000, constraint_violation_penalty=100000, debug=False)
+    # print("constraint satisfied :", is_feasible(best_solution, problem_data))
+    
+    selected_columns = [idx for idx, val in enumerate(best_solution) if val==1]
+    # # print("best_solution", best_solution)
+    # print("selected_columns", selected_columns)
+    # print("cost of solution", best_cost)
+    
+    check_list = []
+    for i in selected_columns:
+        # print(list(columns[i]))
+        check_list.extend(list(columns[i]))
+    # check_list.sort()
+    # print(check_list)
+    
+    # print("row count", len(rows))
+    # print("length", len(check_list))
+    # print("length", len(set(check_list)))
+    # print("feasible: ",is_feasible(best_solution, problem))
+    feasible = is_feasible(best_solution, problem)
+    
+    return best_solution, best_cost, feasible
 
 if __name__ == "__main__":
-    filename = "./data/set_cover/sppnw41.txt"
+    filename = "./sppnw41.txt"
     constraint_matrix, column_costs = load_data_set(filename)
     rows_dict, columns_dict = convert_to_dictionaries(constraint_matrix)
     problem_data = {}
@@ -155,5 +196,5 @@ if __name__ == "__main__":
     problem_data["cost"] = column_costs
     print("row count:", len(rows_dict))
     print("column count:", len(columns_dict))
-    best_solution, best_cost = genetic_algorithm_set_partition(constraint_matrix, column_costs, max_iterations=200, population_size=1000, constraint_violation_penalty=100000)
+    best_solution, best_cost = genetic_algorithm_set_partition(constraint_matrix, column_costs, max_iterations=100, population_size=1000, constraint_violation_penalty=100000)
     print("constraint satisfied :", is_feasible(best_solution, problem_data))

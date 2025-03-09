@@ -1,0 +1,13 @@
+Problem,Algorithm,Avg Result,Std Dev Result,Avg Time (s),Std Dev Time (s)
+sppnw41.txt,sa,11332,49.2,0.26,0.008
+sppnw42.txt,sa,9041,1268.159,1.98,0.332
+sppnw43.txt,sa,9559,487.055,1.179,0.116
+sppnw41.txt,bga,15908,2446.499,2.668,0.16
+sppnw42.txt,bga,13687,952.11,14.679,2.132
+sppnw43.txt,bga,14220,2011.111,12.538,2.066
+sppnw41.txt,ibga,11307,0.0,3.487,0.666
+sppnw42.txt,ibga,7666,0.0,14.083,0.841
+sppnw43.txt,ibga,8904,0.0,10.155,0.148
+sppnw41.txt,ibgasr,11307,0.0,47.565,1.513
+sppnw42.txt,ibgasr,7665,3.0,81.627,9.45
+sppnw43.txt,ibgasr,8904,0.0,90.37,7.657
